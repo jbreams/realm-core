@@ -52,7 +52,7 @@ jobWrapper {
         releaseTesting = targetBranch.contains('release')
         isMaster = currentBranch.contains('master')
         longRunningTests = isMaster || currentBranch.contains('next-major')
-        isPublishingRun = false
+        isPublishingRun = true
         if (gitTag) {
             isPublishingRun = currentBranch.contains('release')
         }
@@ -374,7 +374,7 @@ def doAndroidBuildInDocker(String abi, String buildType, boolean runTestsInEmula
                         }
                         stash includes:"${buildDir}/realm-*.tar.gz", name:stashName
                         androidStashes << stashName
-                        if (gitTag) {
+                        if (isPublishingRun) {
                             publishingStashes << stashName
                         }
                     }
@@ -387,7 +387,7 @@ def doAndroidBuildInDocker(String abi, String buildType, boolean runTestsInEmula
                             }
                             stash includes:"${buildDir}/realm-*.tar.gz", name:stashName
                             androidStashes << stashName
-                            if (gitTag) {
+                            if (isPublishingRun) {
                                 publishingStashes << stashName
                             }
                             try {
@@ -448,7 +448,7 @@ def doBuildWindows(String buildType, boolean isUWP, String platform, boolean run
                         )
                 }
                 bat "\"${tool 'cmake'}\\..\\cpack.exe\" -C ${buildType} -D CPACK_GENERATOR=TGZ"
-                if (gitTag) {
+                if (isPublishingRun) {
                     def stashName = "windows___${platform}___${isUWP?'uwp':'nouwp'}___${buildType}"
                     archiveArtifacts('*.tar.gz')
                     stash includes:'*.tar.gz', name:stashName
@@ -622,7 +622,7 @@ def doBuildAppleDevice(String sdk, String buildType) {
             def stashName = "${sdk}___${buildType}"
             stash includes:"build-${sdk}-${buildType}/*.tar.gz", name:stashName
             cocoaStashes << stashName
-            if(gitTag) {
+            if(isPublishingRun) {
                 publishingStashes << stashName
             }
         }
