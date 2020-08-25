@@ -1,0 +1,87 @@
+functions:
+  "setup packages":
+    - command: shell.exec
+      params:
+        working_dir: /
+        script: |-
+          set -o errexit
+          sudo apt-get install clang-format libprocps-dev
+  "fetch source":
+    - command: git.get_project
+      params: {directory: realm-core}
+    - command: shell.exec
+      params:
+        working_dir: realm-core
+        script: |-
+          set -o errexit
+          git submodule update --init --recursive
+
+tasks:
+- name: compile
+  commands:
+  - func: "setup packages"
+  - func: "fetch source"
+  - command: shell.exec
+    params:
+      working_dir: realm-core
+      script: |-
+        set -o errexit
+        source ./evergreen/find-cmake.sh
+
+        mkdir build
+        cd build
+        cmake \
+          -G Ninja \
+          -DREALM_BUILD_COMMANDLINE_TOOLS=On \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=On \
+          -DCMAKE_ENABLE_ENCRYPTION=On \
+          -DCMAKE_ENABLE_SYNC=On \
+          ..
+
+        ninja build
+  - command: archive.targz_pack
+    params:
+      target: realm-build-artifacts.tar.gz
+      source_dir: realm-core/build
+      include: [./**]
+      exclude_files:
+        - "*.o"
+  - command: s3.put
+    params:
+      aws_key: '${artifacts_aws_access_key}'
+      aws_secret: '${artifacts_aws_secret_key}'
+      remote_file: '${project}/${branch_name}/realm-core-artifacts.tar.gz'
+      bucket: mciuploads
+      permissions: public-read
+      local_file: 'realm-build-artifacts.tar.gz'
+      content_type: '${content_type|application/x-gzip}'
+- name: lint
+  commands:
+  - func: "setup packages"
+  - func: "fetch source"
+  - command: shell.exec
+    params:
+      working_dir: realm-core
+      script: |-
+        readonly out=$(git clang-format -v --diff)
+
+        if [[ "$out" == *"no modified files to format"* ]]; then exit 0; fi
+        if [[ "$out" == *"clang-format did not modify any files"* ]]; then exit 0; fi
+
+        echo "ERROR: you need to run git clang-format on your commit"
+        echo $out
+        exit 1
+ 
+# NOTE: When adding a new variant, update the "upload-all" task.
+buildvariants:
+- name: ubuntu2004
+  display_name: "Ubuntu 20.04 64-bit"
+  run_on: ubuntu2004-small
+  expansions:
+  tasks:
+  - name: compile
+    distros:
+    - ubuntu2004-large
+  - lint
+
+
